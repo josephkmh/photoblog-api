@@ -1,0 +1,4 @@
+node_modules/
+config/db-credentials.*
+config/s3-credentials.*
+uploads/
