@@ -3,6 +3,7 @@ const appConfig = require('../config/app-config');
 const mysql = require('mysql');
 const fs = require('fs');
 const uuid = require('uuid/v1');
+const jimp = require('jimp');
 
 // AWS JavaScript SDK for AWS integration
 const AWS = require('aws-sdk');
@@ -24,6 +25,25 @@ module.exports = {
                 }
                 resolve(results[0]['count']);
             });
+        });
+    },
+    generatePhotoSizes(id) {
+        this.getPhoto(id)
+        .then(photo => {
+            jimp.read(photo.sizes.full.url).then((err, image) => {
+                console.log(image);
+                if (err) {
+                    console.log(err);
+                    reject(err);
+                    return;
+                }
+                console.log(image);
+                resolve(image);
+            });
+        })
+        .catch(err => {
+            console.log(err);
+            return err;
         });
     },
     // Returns an array of photos when given an album name, used in getAlbum
@@ -194,6 +214,26 @@ module.exports = {
             });
         });
     },
+    saveNewPhotoToDb(data) {
+        return new Promise(function(resolve, reject){
+            let sql = "INSERT INTO images (image_url, width, height, mid_url, thumb_url, stream, date) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            let inserts = [data.image_url, data.width, data.height, data.mid_url, data.thumb_url, data.stream, data.date];
+            sql = db.format(sql, inserts);
+            db.query(sql, function(err, results, fields){
+                if (err || !results.insertId) {
+                    console.log('there was an error');
+                    console.log(err);
+                    reject({
+                        message: `saveNewPhotoToDb failed.`,
+                        error: err
+                    });
+                    return;
+                }
+                data.id = results.insertId;
+                resolve(data);
+            });
+        });
+    },
     uploadPhoto(path) {
         let date = new Date().toISOString().substr(0, 10);
         let uniqueId = uuid();
@@ -209,6 +249,11 @@ module.exports = {
                 }
                 reject('No error or data received.');
             });
+        });
+    },
+    updatePhoto(id, data) {
+        return new Promise((resolve, reject) => {
+
         });
     }
 }
