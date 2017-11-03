@@ -10,7 +10,6 @@ app.use('/photo', routes.photo);
 app.use('/album', routes.album);
 app.use('/tag', routes.tag);
 app.use('/stream', routes.stream);
-app.use('/upload', routes.upload);
 
 if (process.env.NODE_ENV === 'development') {
     app.use(function (err, req, res, next) {
