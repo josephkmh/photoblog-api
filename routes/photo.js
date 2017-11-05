@@ -1,13 +1,25 @@
 const express = require('express'),
     router = express.Router(),
     app = require('../app'),
-    db = require('../config/db-connection');
+    db = require('../config/db-connection')
+    uuid = require('uuid/v4')
+    mime = require('mime');
 
 // multer for handling multipart/form-data uploads
 const multer = require('multer');
-const upload = multer({ 
-    dest: 'uploads/'
-});
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/full');
+    },
+    filename: (req, file, cb) => {
+        let dateObj  = new Date();
+        let uniqueId = uuid().substr(0,12);
+        let date     = dateObj.toISOString().substr(0, 10);
+        let ext      = mime.extension(file.mimetype);
+        cb(null, `${uniqueId}_${date}_full.${ext}`);
+    }
+})
+const upload = multer({storage})
 
 router.get('/', function(req, res) {
     res.json({
@@ -38,7 +50,7 @@ router.get('/:id', function(req, res) {
     });
 });
 
-router.post('/', upload.single('photo'), function(req, res) {
+router.post('/', upload.single('image'), function(req, res) {
     //TODO: check filetype and handle any errors
     app.uploadPhoto(req.file.path)
     .then(data => {
