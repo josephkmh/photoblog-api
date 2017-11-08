@@ -4,6 +4,7 @@ const mysql = require('mysql');
 const fs = require('fs');
 const uuid = require('uuid/v1');
 const jimp = require('jimp');
+const mime = require('mime');
 
 // AWS JavaScript SDK for AWS integration
 const AWS = require('aws-sdk');
@@ -18,32 +19,37 @@ module.exports = {
         sql = db.format(sql, inserts);
 
         return new Promise(function(resolve, reject){
-            db.query(sql, function(e, results, fields){
-                if (e) {
-                    reject(e);
+            db.query(sql, function(err, results, fields){
+                if (err) {
+                    reject(err);
                     return;
                 }
                 resolve(results[0]['count']);
             });
         });
     },
-    generatePhotoSizes(id) {
-        this.getPhoto(id)
-        .then(photo => {
-            jimp.read(photo.sizes.full.url).then((err, image) => {
-                console.log(image);
-                if (err) {
-                    console.log(err);
-                    reject(err);
-                    return;
-                }
-                console.log(image);
-                resolve(image);
+    generatePhotoSizes(filename) {
+        return new Promise((resolve, reject) => {
+            let medium, thumbnail;
+            jimp.read(`uploads/full/${filename}`)
+            .then(fullImage => {
+                const mediumPath = `uploads/medium/${filename}`;
+                console.log('writing medium image to this path: '+mediumPath);       
+                const mediumImage = fullImage.scaleToFit(800,800).quality(60).write(mediumPath);  
+                return {
+                    fullImage,
+                    mediumPath
+                };
+            })
+            .then(({fullImage, mediumPath}) => {
+                const thumbnailPath = `uploads/thumbnail/${filename}`;
+                const thumbnailImage = fullImage.scaleToFit(400,400).quality(60).write(thumbnailPath);
+                resolve({
+                    fullImage,
+                    mediumPath,
+                    thumbnailPath
+                });
             });
-        })
-        .catch(err => {
-            console.log(err);
-            return err;
         });
     },
     // Returns an array of photos when given an album name, used in getAlbum
@@ -137,18 +143,21 @@ module.exports = {
         return new Promise((resolve, reject) => {
             db.query(sql, (err, results, fields) => {
                 if (err) reject("GET_TAGS_ERROR");
-                if (results.length === 0) resolve({image_id: id, tags: []});
-                var tags = results.map(row => row.tag);
-                var tagsObject = {
-                    image_id: id,
-                    tags: tags
+                if (!results || results.length === 0) {
+                    resolve({image_id: id, tags: []})
+                } else {
+                    var tags = results.map(row => row.tag);
+                    var tagsObject = {
+                        image_id: id,
+                        tags: tags
+                    }
+                    resolve(tagsObject);
                 }
-                resolve(tagsObject);
             });
         });
     },
     getPhoto(id) {
-        let sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.image_id=?`;
+        let sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM images LEFT JOIN albums ON albums.image_id=images.image_id WHERE images.image_id=?`;
         let inserts = [id];
         sql = mysql.format(sql, inserts);
 
@@ -163,26 +172,15 @@ module.exports = {
                 resolve({
                     album: data.album,
                     hidden: data.hidden,
-                    id: data.image_id,
-                    isAlbumCover: data.album_cover,
-                    isOnFrontPage: data.stream,
-                    sizes: {
-                        small: {
-                            url: data.thumb_url,
-                            width: null,
-                            height: null
-                        },
-                        medium: {
-                            url: data.mid_url,
-                            width: null,
-                            height: null
-                        },
-                        full: {
-                            url: data.image_url,
-                            width: data.width,
-                            height: data.height
-                        }
-                    },
+                    image_id: data.image_id,
+                    album_cover: data.album_cover,
+                    stream: data.stream,
+                    processing: data.processing,
+                    width: data.width,
+                    height: data.height,
+                    image_url: data.image_url,
+                    mid_url: data.mid_url,
+                    thumb_url: data.thumb_url,
                     tags: null
                 });
             });
@@ -216,13 +214,12 @@ module.exports = {
     },
     saveNewPhotoToDb(data) {
         return new Promise(function(resolve, reject){
-            let sql = "INSERT INTO images (image_url, width, height, mid_url, thumb_url, stream, date) VALUES (?, ?, ?, ?, ?, ?, ?)";
-            let inserts = [data.image_url, data.width, data.height, data.mid_url, data.thumb_url, data.stream, data.date];
+            let sql = "INSERT INTO images (stream, date) VALUES (?, ?)";
+            let inserts = [data.stream, data.date];
             sql = db.format(sql, inserts);
             db.query(sql, function(err, results, fields){
                 if (err || !results.insertId) {
-                    console.log('there was an error');
-                    console.log(err);
+                    console.error(err);
                     reject({
                         message: `saveNewPhotoToDb failed.`,
                         error: err
@@ -234,26 +231,74 @@ module.exports = {
             });
         });
     },
-    uploadPhoto(path) {
-        let date = new Date().toISOString().substr(0, 10);
-        let uniqueId = uuid();
-        let fileStream = fs.createReadStream(path);
+    uploadPhotoToS3({path, filename, folder = false, mimetype}) {
+        const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
+        console.error(Key);
+        const fileStream = fs.createReadStream(path);
         return new Promise((resolve, reject) => {
-            S3.upload({Key: `${date}_${uniqueId}`, Body: fileStream, Bucket: bucket}, function(err, data) {
+            S3.upload({Key, Body: fileStream, Bucket: bucket, ContentType: mimetype}, function(err, data) {
                 if (err) {
                     console.log("Error", err);
                     reject(err);
                 } if (data) {
-                    console.log("Upload Success");
+                    data.filename = filename;
                     resolve(data);
                 }
                 reject('No error or data received.');
             });
         });
     },
-    updatePhoto(id, data) {
-        return new Promise((resolve, reject) => {
-
+    updatePhoto(id, newData) {
+        console.log(`save to image_id ${id}:`);
+        console.log(newData);
+        console.log('\n');
+        console.log('existing data:');
+        return this.getPhoto(id)
+        .then(oldData => {
+            console.log(oldData);
+            return new Promise((resolve, reject) => {
+                let sql = "UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?";
+                let photo = {};
+                for (let key in newData) {
+                    if (!newData.hasOwnProperty(key)) continue;
+                    photo[key] = newData[key];
+                }
+                for (let key in oldData) {
+                    if (!oldData.hasOwnProperty(key)) continue;
+                    if (photo[key]) continue;
+                    photo[key] = oldData[key];
+                }
+                console.log('\n');
+                console.log('combined data:');
+                console.log(photo);
+                console.log('\n');
+                let inserts = [
+                    photo.image_url,
+                    photo.width,
+                    photo.height,
+                    photo.mid_url,
+                    photo.thumb_url,
+                    photo.date,
+                    photo.description,
+                    photo.stream,
+                    photo.hidden,
+                    photo.processing,
+                    photo.image_id
+                ];
+                sql = db.format(sql, inserts);
+                db.query(sql, function(err, results, fields){
+                    console.log(results);
+                    if (err || !results) {
+                        console.log('there was an error when updating a photo...');
+                        reject({
+                            message: `updatePhoto failed.`,
+                            error: err
+                        });
+                        return;
+                    }
+                    resolve(photo);
+                });
+            });
         });
     }
 }

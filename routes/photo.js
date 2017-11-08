@@ -3,9 +3,10 @@ const express = require('express'),
     app = require('../app'),
     db = require('../config/db-connection')
     uuid = require('uuid/v4')
-    mime = require('mime');
+    mime = require('mime')
+    fs = require('fs');
 
-// multer for handling multipart/form-data uploads
+// initialize multer for handling multipart/form-data uploads
 const multer = require('multer');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -15,8 +16,9 @@ const storage = multer.diskStorage({
         let dateObj  = new Date();
         let uniqueId = uuid().substr(0,12);
         let date     = dateObj.toISOString().substr(0, 10);
-        let ext      = mime.extension(file.mimetype);
-        cb(null, `${uniqueId}_${date}_full.${ext}`);
+        file.ext     = mime.extension(file.mimetype);
+        file.bareFilename = `${uniqueId}_${date}`;
+        cb(null, `${file.bareFilename}.${file.ext}`);
     }
 })
 const upload = multer({storage})
@@ -51,36 +53,66 @@ router.get('/:id', function(req, res) {
 });
 
 router.post('/', upload.single('image'), function(req, res) {
-    //TODO: check filetype and handle any errors
-    app.uploadPhoto(req.file.path)
-    .then(data => {
-        return app.saveNewPhotoToDb({
-            image_url: data.Location,
-            mid_url: 'null',
-            thumb_url: 'null',
-            width: null,
-            height: null,
-            stream: req.body.stream,
-            date: req.body.date
-        });
+    console.log(req.file);
+    let file = req.file;
+    let photo = {
+        id: null
+    }
+    app.saveNewPhotoToDb({
+        stream: req.body.stream,
+        album: req.body.album,
+        date: req.body.date
     })
     .then(data => {
-        console.log('responding with data of this object: ');
-        console.log(data);
+        photo.id = data.id;
         res.json({
             status: 200,
             message: `Photo was successfully uploaded.`,
-            photo: {
-                image_url: data.Location
-            }
+            photo
         });
         return data;
     })
     .then(data => {
-        console.log('attempting to generate sizes of image '+data.id);
-        app.generatePhotoSizes(data.id);
+        return app.generatePhotoSizes(file.filename);
     })
-    .catch(e => {
+    .then(data => {
+        file.mediumPath = data.mediumPath;
+        file.thumbnailPath = data.thumbnailPath;
+        return app.uploadPhotoToS3({
+            path: file.path,
+            filename: `${file.bareFilename}__full.${file.ext}`,
+            folder: 'full',
+            mimetype: file.mimetype
+        });
+    })
+    .then(fullData => {
+        photo.image_url = fullData.Location;
+        return app.uploadPhotoToS3({
+            path: file.mediumPath,
+            filename: `${file.bareFilename}__medium.${file.ext}`,
+            folder: 'medium',
+            mimetype: file.mimetype
+        });
+    })
+    .then(mediumData => {
+        photo.mid_url = mediumData.Location;
+        let thumbnailFilename = file.filename.replace(file.ext, '');
+        return app.uploadPhotoToS3({
+            path: file.thumbnailPath,
+            filename: `${file.bareFilename}__thumbnail.${file.ext}`,
+            folder: 'thumbnail',
+            mimetype: file.mimetype
+        });
+    })
+    .then(thumbnailData => {
+        photo.thumb_url = thumbnailData.Location;
+        return app.updatePhoto(photo.id, {
+            image_url: photo.image_url,
+            mid_url: photo.mid_url,
+            thumb_url: photo.thumb_url
+        });
+    })
+    .catch(err => {
         console.log('Error in uploading new photo.', err);
     });
 });
@@ -88,7 +120,6 @@ router.post('/', upload.single('image'), function(req, res) {
 router.put('/:id', function(req, res) {
     app.updatePhoto(req.params.id)
     .then(data => {
-        console.log(data);
         res.json({
             status: 200,
             message: `Photo ${data.id} was updated.`,
