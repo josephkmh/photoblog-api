@@ -233,7 +233,6 @@ module.exports = {
     },
     uploadPhotoToS3({path, filename, folder = false, mimetype}) {
         const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
-        console.error(Key);
         const fileStream = fs.createReadStream(path);
         return new Promise((resolve, reject) => {
             S3.upload({Key, Body: fileStream, Bucket: bucket, ContentType: mimetype}, function(err, data) {
@@ -248,56 +247,72 @@ module.exports = {
             });
         });
     },
-    updatePhoto(id, newData) {
-        console.log(`save to image_id ${id}:`);
-        console.log(newData);
-        console.log('\n');
-        console.log('existing data:');
-        return this.getPhoto(id)
-        .then(oldData => {
-            console.log(oldData);
-            return new Promise((resolve, reject) => {
-                let sql = "UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?";
-                let photo = {};
-                for (let key in newData) {
-                    if (!newData.hasOwnProperty(key)) continue;
-                    photo[key] = newData[key];
+    updateAlbumsTable(newData, albumAssigned = false) {
+        return new Promise((resolve, reject) => {
+            let sql;
+            if (!albumAssigned) {
+                sql = "INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)";
+            } else {
+                sql = "UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?";
+            }
+            let inserts = [newData.album, newData.position, newData.album_cover, newData.image_id];
+            sql = db.format(sql, inserts);
+            db.query(sql, (err, results, fields) => {
+                if (err || !results || results.affectedRows !== 1) {
+                    reject({
+                        message: 'updating albums table failed.', 
+                        error: err
+                    });
+                    return;
+                };
+                resolve(newData);
+            });
+        });
+    },
+    updatePhoto(requestData) {
+        let newData = {};
+        let oldData = {};
+        let albumAssigned = false;
+        return this.getPhoto(requestData.image_id)
+        .then(data => {
+            if (data.album) albumAssigned = true;
+            oldData = data;
+            newData = Object.assign(oldData, requestData);
+            return this.updateImagesTable(newData);
+        })
+        .then(data => {
+            return this.updateAlbumsTable(newData, albumAssigned);
+        })
+        .then(albumsData => {
+            return newData;
+        });
+    },
+    updateImagesTable(newData) {
+        return new Promise((resolve, reject) => {
+            let sql = "UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?";
+            let inserts = [
+                newData.image_url,
+                newData.width,
+                newData.height,
+                newData.mid_url,
+                newData.thumb_url,
+                newData.date,
+                newData.description,
+                newData.stream,
+                newData.hidden,
+                newData.processing,
+                newData.image_id
+            ];
+            sql = db.format(sql, inserts);
+            db.query(sql, function(err, results, fields){
+                if (err || !results) {
+                    reject({
+                        message: `updating images table failed`,
+                        error: err
+                    });
+                    return;
                 }
-                for (let key in oldData) {
-                    if (!oldData.hasOwnProperty(key)) continue;
-                    if (photo[key]) continue;
-                    photo[key] = oldData[key];
-                }
-                console.log('\n');
-                console.log('combined data:');
-                console.log(photo);
-                console.log('\n');
-                let inserts = [
-                    photo.image_url,
-                    photo.width,
-                    photo.height,
-                    photo.mid_url,
-                    photo.thumb_url,
-                    photo.date,
-                    photo.description,
-                    photo.stream,
-                    photo.hidden,
-                    photo.processing,
-                    photo.image_id
-                ];
-                sql = db.format(sql, inserts);
-                db.query(sql, function(err, results, fields){
-                    console.log(results);
-                    if (err || !results) {
-                        console.log('there was an error when updating a photo...');
-                        reject({
-                            message: `updatePhoto failed.`,
-                            error: err
-                        });
-                        return;
-                    }
-                    resolve(photo);
-                });
+                resolve(newData);
             });
         });
     }

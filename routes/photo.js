@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
         file.bareFilename = `${uniqueId}_${date}`;
         cb(null, `${file.bareFilename}.${file.ext}`);
     }
-})
+});
 const upload = multer({storage})
 
 router.get('/', function(req, res) {
@@ -118,18 +118,23 @@ router.post('/', upload.single('image'), function(req, res) {
 });
 
 router.put('/:id', function(req, res) {
-    app.updatePhoto(req.params.id)
+    let newData = req.body;
+    newData.image_id = parseInt(req.params.id, 10);
+    app.updatePhoto(newData)
     .then(data => {
+        console.log(data);
         res.json({
             status: 200,
-            message: `Photo ${data.id} was updated.`,
+            message: `Photo ${data.image_id} was updated.`,
             photo: data
         });
     })
     .catch(e => {
+        console.error(e);
         res.status(500).json({
             status: 500,
-            message: `Something went wrong. Sorry about that!`
+            message: `Something went wrong. Sorry about that!`,
+            error: e
         });
     });
 });
