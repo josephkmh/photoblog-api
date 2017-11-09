@@ -170,10 +170,8 @@ module.exports = {
                 const data = results[0];
 
                 resolve({
-                    album: data.album,
                     hidden: data.hidden,
-                    image_id: data.image_id,
-                    album_cover: data.album_cover,
+                    id: data.image_id,
                     stream: data.stream,
                     processing: data.processing,
                     width: data.width,
@@ -181,7 +179,12 @@ module.exports = {
                     image_url: data.image_url,
                     mid_url: data.mid_url,
                     thumb_url: data.thumb_url,
-                    tags: null
+                    tags: null,
+                    album: {
+                        name: data.album,
+                        cover: data.album_cover,
+                        position: data.position
+                    }
                 });
             });
         });
@@ -255,7 +258,7 @@ module.exports = {
             } else {
                 sql = "UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?";
             }
-            let inserts = [newData.album, newData.position, newData.album_cover, newData.image_id];
+            let inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
             sql = db.format(sql, inserts);
             db.query(sql, (err, results, fields) => {
                 if (err || !results || results.affectedRows !== 1) {
@@ -273,9 +276,9 @@ module.exports = {
         let newData = {};
         let oldData = {};
         let albumAssigned = false;
-        return this.getPhoto(requestData.image_id)
+        return this.getPhoto(requestData.id)
         .then(data => {
-            if (data.album) albumAssigned = true;
+            if (data.album.name) albumAssigned = true;
             oldData = data;
             newData = Object.assign(oldData, requestData);
             return this.updateImagesTable(newData);
@@ -284,8 +287,9 @@ module.exports = {
             return this.updateAlbumsTable(newData, albumAssigned);
         })
         .then(albumsData => {
-            return newData;
-        });
+            return this.getPhoto(requestData.id)
+        })
+        .then(photo => photo); 
     },
     updateImagesTable(newData) {
         return new Promise((resolve, reject) => {
@@ -301,7 +305,7 @@ module.exports = {
                 newData.stream,
                 newData.hidden,
                 newData.processing,
-                newData.image_id
+                newData.id
             ];
             sql = db.format(sql, inserts);
             db.query(sql, function(err, results, fields){

@@ -53,7 +53,6 @@ router.get('/:id', function(req, res) {
 });
 
 router.post('/', upload.single('image'), function(req, res) {
-    console.log(req.file);
     let file = req.file;
     let photo = {
         id: null
@@ -119,13 +118,12 @@ router.post('/', upload.single('image'), function(req, res) {
 
 router.put('/:id', function(req, res) {
     let newData = req.body;
-    newData.image_id = parseInt(req.params.id, 10);
+    newData.id = parseInt(req.params.id, 10);
     app.updatePhoto(newData)
     .then(data => {
-        console.log(data);
         res.json({
             status: 200,
-            message: `Photo ${data.image_id} was updated.`,
+            message: `Photo ${data.id} was updated.`,
             photo: data
         });
     })
