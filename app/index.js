@@ -21,7 +21,10 @@ module.exports = {
         return new Promise(function(resolve, reject){
             db.query(sql, function(err, results, fields){
                 if (err) {
-                    reject(err);
+                    reject({
+                        message: "error counting images in album",
+                        error: err
+                    });
                     return;
                 }
                 resolve(results[0]['count']);
@@ -33,8 +36,7 @@ module.exports = {
             let medium, thumbnail;
             jimp.read(`uploads/full/${filename}`)
             .then(fullImage => {
-                const mediumPath = `uploads/medium/${filename}`;
-                console.log('writing medium image to this path: '+mediumPath);       
+                const mediumPath = `uploads/medium/${filename}`;   
                 const mediumImage = fullImage.scaleToFit(800,800).quality(60).write(mediumPath);  
                 return {
                     fullImage,
@@ -54,7 +56,7 @@ module.exports = {
     },
     // Returns an array of photos when given an album name, used in getAlbum
     getAlbum(name) {
-        let sql = `SELECT albums.album, albums.position, images.* FROM albums INNER JOIN images ON albums.image_id=images.image_id WHERE albums.album=? ORDER BY albums.position`;
+        let sql = `SELECT albums.album, albums.position, albums.album_cover, images.* FROM albums INNER JOIN images ON albums.image_id=images.image_id WHERE albums.album=? ORDER BY albums.position`;
         let inserts = [name]
         sql = db.format(sql, inserts);
         
@@ -63,11 +65,13 @@ module.exports = {
             db.query(sql, (err, results, fields) => {
                 if( err || !results || results.length === 0 ) reject("NO_ALBUM_FOUND");
                 const photos = results.map(photo => {
+                    console.log('image ',photo.image_id,photo.album_cover);
                     return {
                         hidden: photo.hidden,
                         id: photo.image_id,
                         isAlbumCover: photo.album_cover,
                         isOnFrontPage: photo.stream,
+                        position: photo.position,
                         sizes: {
                             small: {
                                 url: photo.thumb_url,
@@ -90,6 +94,7 @@ module.exports = {
                 });
                 resolve({
                     album: results[0].album,
+                    size: photos.length,
                     photos
                 });
             });
@@ -128,7 +133,7 @@ module.exports = {
     }) {
         return this.getImagesWithTag({tag})
         .then(r => {
-            let promises = r.map(image => this.getPhoto(image.image_id));
+            let promises = r.map(image => this.getPhoto(image.id));
             return Promise.all(promises, values => {
                 return values;
             });
@@ -216,6 +221,7 @@ module.exports = {
         });
     },
     saveNewPhotoToDb(data) {
+        console.log('saveNewPhotoToDb: ',data);
         return new Promise(function(resolve, reject){
             let sql = "INSERT INTO images (stream, date) VALUES (?, ?)";
             let inserts = [data.stream, data.date];
@@ -232,7 +238,8 @@ module.exports = {
                 data.id = results.insertId;
                 resolve(data);
             });
-        });
+        })
+        .then(data =>  this.updateAlbumsTable(data));
     },
     uploadPhotoToS3({path, filename, folder = false, mimetype}) {
         const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
@@ -250,15 +257,40 @@ module.exports = {
             });
         });
     },
+    reorderAlbum(name) {
+        return new Promise( function(resolve, reject ){
+            let sql = "SELECT * FROM albums WHERE album=? ORDER BY position ASC";
+            let inserts = [name];
+            sql = db.format(sql, inserts);
+            db.query(sql, function(err, results, fields){
+                if(err) console.log(err);
+                let count = 1;
+                results.forEach(function(image){
+                    let sql = "UPDATE albums SET position=? WHERE image_id=?";
+                    let inserts = [count, image.image_id];
+                    sql = db.format(sql, inserts);
+                    db.query(sql, function(err, results, fields){
+                        if( err ) reject({
+                            message: 'reordering album failed.', 
+                            error: err
+                        });
+                    });
+                    count++;
+                });
+                resolve();
+            });
+        });
+    },
     updateAlbumsTable(newData, albumAssigned = false) {
         return new Promise((resolve, reject) => {
-            let sql;
+            let sql, inserts;
             if (!albumAssigned) {
                 sql = "INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)";
+                inserts = [newData.album.name, 1, newData.album.cover, newData.id];
             } else {
                 sql = "UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?";
+                inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
             }
-            let inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
             sql = db.format(sql, inserts);
             db.query(sql, (err, results, fields) => {
                 if (err || !results || results.affectedRows !== 1) {
@@ -272,6 +304,46 @@ module.exports = {
             });
         });
     },
+    removeAlbumCover(albumName) {
+        return new Promise(function(resolve, reject){
+            let sql = "UPDATE albums SET album_cover=0 WHERE album_cover=1 AND album=?";
+            let inserts = [albumName];
+            sql = db.format(sql, inserts);
+            db.query(sql, function(err, results, fields) {
+                if (err) {
+                    reject({
+                        message: 'error removing album cover',
+                        error: err
+                    })
+                }
+                console.log(sql);
+                resolve(fields);
+            });
+        });
+    },
+    setAlbumCover(albumName, imageId = null) {
+        return this.removeAlbumCover(albumName)
+        .then(() => {
+            var sql, inserts;
+            if (!imageId) {
+                sql = "UPDATE albums SET album_cover=1 WHERE position=1 AND album=?";
+                inserts = [albumName];
+            } else {
+                sql = "UPDATE albums SET album_cover=1 WHERE image_id=? AND album=?";
+                inserts = [imageId, albumName];
+            }
+            sql = db.format(sql, inserts);
+            db.query(sql, function(err, results, fields){
+                if (err) {
+                    reject({
+                        message: "error setting album cover",
+                        error: err
+                    });
+                };
+                return results;
+            });
+        })
+    },
     updatePhoto(requestData) {
         let newData = {};
         let oldData = {};
@@ -281,15 +353,11 @@ module.exports = {
             if (data.album.name) albumAssigned = true;
             oldData = data;
             newData = Object.assign(oldData, requestData);
-            return this.updateImagesTable(newData);
         })
-        .then(data => {
-            return this.updateAlbumsTable(newData, albumAssigned);
-        })
-        .then(albumsData => {
-            return this.getPhoto(requestData.id)
-        })
-        .then(photo => photo); 
+        .then(() => this.updateImagesTable(newData))
+        .then(() => this.updateAlbumsTable(newData, albumAssigned))
+        .then(() => this.reorderAlbum(newData.album.name))
+        .then(() => this.getPhoto(newData.id));
     },
     updateImagesTable(newData) {
         return new Promise((resolve, reject) => {

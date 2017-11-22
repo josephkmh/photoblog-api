@@ -59,8 +59,12 @@ router.post('/', upload.single('image'), function(req, res) {
     }
     app.saveNewPhotoToDb({
         stream: req.body.stream,
-        album: req.body.album,
-        date: req.body.date
+        date: req.body.date,
+        album: {
+            name: req.body.album,
+            position: null,
+            cover: req.body.album_cover
+        }
     })
     .then(data => {
         photo.id = data.id;
@@ -105,7 +109,8 @@ router.post('/', upload.single('image'), function(req, res) {
     })
     .then(thumbnailData => {
         photo.thumb_url = thumbnailData.Location;
-        return app.updatePhoto(photo.id, {
+        return app.updatePhoto({
+            id: photo.id,
             image_url: photo.image_url,
             mid_url: photo.mid_url,
             thumb_url: photo.thumb_url
@@ -127,6 +132,7 @@ router.put('/:id', function(req, res) {
             photo: data
         });
     })
+    .then(app.setAlbumCover(req.body.album.name, 2211))
     .catch(e => {
         console.error(e);
         res.status(500).json({
