@@ -2,8 +2,12 @@ const express = require('express'),
     app = express(),
     port = process.env.port || 3000,
     db = require('./config/db-connection')
-    bodyParser = require('body-parser');
+    bodyParser = require('body-parser')
+    cors = require('cors');
+    
 
+// allow CORS
+app.use(cors());
 
 // initialize body parser for simple json payloads
 app.use(bodyParser.json());
