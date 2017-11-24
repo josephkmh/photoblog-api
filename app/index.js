@@ -218,65 +218,57 @@ module.exports = {
     });
   },
   saveNewPhotoToDb(data) {
-  console.log('saveNewPhotoToDb: ',data);
-  return new Promise(function(resolve, reject){
-    let sql = "INSERT INTO images (stream, date) VALUES (?, ?)";
-    let inserts = [data.stream, data.date];
-    sql = db.format(sql, inserts);
-    db.query(sql, function(err, results, fields){
-    if (err || !results.insertId) {
-      console.error(err);
-      reject({
-      message: `saveNewPhotoToDb failed.`,
-      error: err
+    return new Promise((resolve, reject) => {
+      let sql = 'INSERT INTO images (stream, date) VALUES (?, ?)';
+      const inserts = [data.stream, data.date];
+      sql = db.format(sql, inserts);
+      db.query(sql, (err, results) => {
+        if (err || !results.insertId) {
+          reject(new ServerError('saveNewPhotoToDb() failed'));
+          return;
+        }
+        const photo = Object.assign({}, data, { id: results.insertId });
+        resolve(photo);
       });
-      return;
-    }
-    data.id = results.insertId;
-    resolve(data);
-    });
-  })
-  .then(data =>  this.updateAlbumsTable(data));
+    })
+      .then(photoData => this.updateAlbumsTable(photoData));
   },
-  uploadPhotoToS3({path, filename, folder = false, mimetype}) {
-  const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
-  const fileStream = fs.createReadStream(path);
-  return new Promise((resolve, reject) => {
-    S3.upload({Key, Body: fileStream, Bucket: bucket, ContentType: mimetype}, function(err, data) {
-    if (err) {
-      console.log("Error", err);
-      reject(err);
-    } if (data) {
-      data.filename = filename;
-      resolve(data);
-    }
-    reject('No error or data received.');
+  uploadPhotoToS3({ path, filename, folder = false, mimetype }) {
+    const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
+    const fileStream = fs.createReadStream(path);
+    return new Promise((resolve, reject) => {
+      S3.upload({Key, Body: fileStream, Bucket: bucket, ContentType: mimetype}, function(err, data) {
+      if (err) {
+        console.log("Error", err);
+        reject(err);
+      } if (data) {
+        data.filename = filename;
+        resolve(data);
+      }
+      reject('No error or data received.');
+      });
     });
-  });
   },
   reorderAlbum(name) {
-  return new Promise( function(resolve, reject ){
-    let sql = "SELECT * FROM albums WHERE album=? ORDER BY position ASC";
-    let inserts = [name];
-    sql = db.format(sql, inserts);
-    db.query(sql, function(err, results, fields){
-    if(err) console.log(err);
-    let count = 1;
-    results.forEach(function(image){
-      let sql = "UPDATE albums SET position=? WHERE image_id=?";
-      let inserts = [count, image.image_id];
+    return new Promise((resolve, reject) => {
+      let sql = 'SELECT * FROM albums WHERE album=? ORDER BY position ASC';
+      const inserts = [name];
       sql = db.format(sql, inserts);
-      db.query(sql, function(err, results, fields){
-      if( err ) reject({
-        message: 'reordering album failed.', 
-        error: err
+      db.query(sql, (err, results) => {
+        if (err) reject(new ServerError('reorderAlbum() failed on first query'));
+        let count = 1;
+        results.forEach((image) => {
+          let sql2 = 'UPDATE albums SET position=? WHERE image_id=?';
+          const inserts2 = [count, image.image_id];
+          sql2 = db.format(sql2, inserts2);
+          db.query(sql2, (err2) => {
+            if (err2) reject(new ServerError('reorderAlbum() failed on second query'));
+          });
+          count++;
+        });
+        resolve();
       });
-      });
-      count++;
     });
-    resolve();
-    });
-  });
   },
   updateAlbumsTable(newData, albumAssigned = false) {
   return new Promise((resolve, reject) => {

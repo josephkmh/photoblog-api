@@ -1,10 +1,9 @@
-const express = require('express'),
-    app = express(),
-    port = process.env.port || 3000,
-    db = require('./config/db-connection')
-    bodyParser = require('body-parser')
-    cors = require('cors');
-    
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+
+const app = express();
+const port = process.env.port || 3000;
 
 // allow CORS
 app.use(cors());
@@ -20,17 +19,17 @@ app.use('/tag', routes.tag);
 app.use('/stream', routes.stream);
 
 if (process.env.NODE_ENV === 'development') {
-    app.use(function (err, req, res, next) {
-        console.log('=== ERROR ===');
-        console.log(err.stack);
-        res.status(500).send('Express caught error...');
-    });
+  app.use(function (err, req, res, next) {
+    console.log('=== ERROR ===');
+    console.log(err.stack);
+    res.status(500).send('Express caught error...');
+  });
 } else {
-    app.use(function (err, req, res, next) {
-        res.status(500).send('Something broke! Sorry about that.');
-    })
+  app.use(function (err, req, res, next) {
+    res.status(500).send('Something broke! Sorry about that.');
+  });
 }
 
 
 app.listen(port);
-console.log(`API server listening on ${port}`)
+console.log(`API server listening on ${port}`);
