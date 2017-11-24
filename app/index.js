@@ -233,19 +233,27 @@ module.exports = {
     })
       .then(photoData => this.updateAlbumsTable(photoData));
   },
-  uploadPhotoToS3({ path, filename, folder = false, mimetype }) {
+  uploadPhotoToS3({
+    path,
+    filename,
+    folder = false,
+    mimetype,
+  } = {}) {
     const Key = folder ? `${folder}/${filename}` : filename; // Need to filter out __full.jpeg for __medium.jpeg, etc.
     const fileStream = fs.createReadStream(path);
     return new Promise((resolve, reject) => {
-      S3.upload({Key, Body: fileStream, Bucket: bucket, ContentType: mimetype}, function(err, data) {
-      if (err) {
-        console.log("Error", err);
-        reject(err);
-      } if (data) {
-        data.filename = filename;
-        resolve(data);
-      }
-      reject('No error or data received.');
+      S3.upload({
+        Key,
+        Body: fileStream,
+        Bucket: bucket,
+        ContentType: mimetype,
+      }, (err, data) => {
+        if (err) reject(new ServerError('uploadPhotoToS3() failed: error from SDK'));
+        if (data) {
+          const uploadData = Object.assign({}, data, { filename });
+          resolve(uploadData);
+        }
+        reject(new ServerError('uploadPhotoToS3() failed: no error or data received.'));
       });
     });
   },
