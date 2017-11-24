@@ -292,44 +292,34 @@ module.exports = {
     });
   },
   removeAlbumCover(albumName) {
-  return new Promise(function(resolve, reject){
-    let sql = "UPDATE albums SET album_cover=0 WHERE album_cover=1 AND album=?";
-    let inserts = [albumName];
-    sql = db.format(sql, inserts);
-    db.query(sql, function(err, results, fields) {
-    if (err) {
-      reject({
-      message: 'error removing album cover',
-      error: err
-      })
-    }
-    console.log(sql);
-    resolve(fields);
+    return new Promise((resolve, reject) => {
+      let sql = 'UPDATE albums SET album_cover=0 WHERE album_cover=1 AND album=?';
+      const inserts = [albumName];
+      sql = db.format(sql, inserts);
+      db.query(sql, (err) => {
+        if (err) reject(new ServerError('removeAlbumCover() failed'));
+        resolve(albumName);
+      });
     });
-  });
   },
   setAlbumCover(albumName, imageId = null) {
-  return this.removeAlbumCover(albumName)
-  .then(() => {
-    var sql, inserts;
-    if (!imageId) {
-    sql = "UPDATE albums SET album_cover=1 WHERE position=1 AND album=?";
-    inserts = [albumName];
-    } else {
-    sql = "UPDATE albums SET album_cover=1 WHERE image_id=? AND album=?";
-    inserts = [imageId, albumName];
-    }
-    sql = db.format(sql, inserts);
-    db.query(sql, function(err, results, fields){
-    if (err) {
-      reject({
-      message: "error setting album cover",
-      error: err
+    return this.removeAlbumCover(albumName)
+      .then(() => {
+        let sql;
+        let inserts;
+        if (!imageId) {
+          sql = 'UPDATE albums SET album_cover=1 WHERE position=1 AND album=?';
+          inserts = [albumName];
+        } else {
+          sql = 'UPDATE albums SET album_cover=1 WHERE image_id=? AND album=?';
+          inserts = [imageId, albumName];
+        }
+        sql = db.format(sql, inserts);
+        db.query(sql, (err, results) => {
+          if (err) throw new ServerError('setAlbumCover() failed');
+          return results;
+        });
       });
-    };
-    return results;
-    });
-  })
   },
   updatePhoto(requestData) {
   let newData = {};
