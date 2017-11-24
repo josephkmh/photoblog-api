@@ -338,32 +338,26 @@ module.exports = {
       .then(() => this.getPhoto(newData.id));
   },
   updateImagesTable(newData) {
-  return new Promise((resolve, reject) => {
-    let sql = "UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?";
-    let inserts = [
-    newData.image_url,
-    newData.width,
-    newData.height,
-    newData.mid_url,
-    newData.thumb_url,
-    newData.date,
-    newData.description,
-    newData.stream,
-    newData.hidden,
-    newData.processing,
-    newData.id
-    ];
-    sql = db.format(sql, inserts);
-    db.query(sql, function(err, results, fields){
-    if (err || !results) {
-      reject({
-      message: `updating images table failed`,
-      error: err
+    return new Promise((resolve, reject) => {
+      let sql = 'UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?';
+      const inserts = [
+        newData.image_url,
+        newData.width,
+        newData.height,
+        newData.mid_url,
+        newData.thumb_url,
+        newData.date,
+        newData.description,
+        newData.stream,
+        newData.hidden,
+        newData.processing,
+        newData.id,
+      ];
+      sql = db.format(sql, inserts);
+      db.query(sql, (err, results) => {
+        if (err || !results) reject(new ServerError('updatImagesTable() failed'));
+        resolve(newData);
       });
-      return;
-    }
-    resolve(newData);
     });
-  });
-  }
-}
+  },
+};
