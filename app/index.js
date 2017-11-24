@@ -322,19 +322,20 @@ module.exports = {
       });
   },
   updatePhoto(requestData) {
-  let newData = {};
-  let oldData = {};
-  let albumAssigned = false;
-  return this.getPhoto(requestData.id)
-  .then(data => {
-    if (data.album.name) albumAssigned = true;
-    oldData = data;
-    newData = Object.assign(oldData, requestData);
-  })
-  .then(() => this.updateImagesTable(newData))
-  .then(() => this.updateAlbumsTable(newData, albumAssigned))
-  .then(() => this.reorderAlbum(newData.album.name))
-  .then(() => this.getPhoto(newData.id));
+    let newData = {};
+    let oldData = {};
+    let albumAssigned = false;
+    return this.getPhoto(requestData.id)
+      .then((data) => {
+        if (data.album.name) albumAssigned = true;
+        oldData = data;
+        newData = Object.assign(oldData, requestData);
+        return newData;
+      })
+      .then(this.updateImagesTable)
+      .then(() => this.updateAlbumsTable(newData, albumAssigned))
+      .then(() => this.reorderAlbum(newData.album.name))
+      .then(() => this.getPhoto(newData.id));
   },
   updateImagesTable(newData) {
   return new Promise((resolve, reject) => {
