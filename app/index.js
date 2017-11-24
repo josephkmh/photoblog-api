@@ -273,11 +273,11 @@ module.exports = {
       });
     });
   },
-  updateAlbumsTable(newData, albumAssigned = false) {
+  updateAlbumsTable(newData, recordExists = false) {
     return new Promise((resolve, reject) => {
       let sql;
       let inserts;
-      if (!albumAssigned) {
+      if (!recordExists) {
         sql = 'INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)';
         inserts = [newData.album.name, 1, newData.album.cover, newData.id];
       } else {
@@ -327,22 +327,23 @@ module.exports = {
   updatePhoto(requestData) {
     let newData = {};
     let oldData = {};
-    let albumAssigned = false;
+    let recordExists = false;
     return this.getPhoto(requestData.id)
       .then((data) => {
-        if (data.album.name) albumAssigned = true;
+        if (data.album.name) recordExists = true;
         oldData = data;
         newData = Object.assign(oldData, requestData);
         return newData;
       })
       .then(this.updateImagesTable)
-      .then(() => this.updateAlbumsTable(newData, albumAssigned))
+      .then(() => this.updateAlbumsTable(newData, recordExists))
       .then(() => this.reorderAlbum(newData.album.name))
       .then(() => this.getPhoto(newData.id));
   },
   updateImagesTable(newData) {
     return new Promise((resolve, reject) => {
       let sql = 'UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?';
+
       const inserts = [
         newData.image_url,
         newData.width,
