@@ -124,37 +124,6 @@ module.exports = {
       });
     });
   },
-  // Returns an array of photo objects when given a tag
-  getTag({
-    tag,
-  } = {}) {
-    return this.getImagesWithTag({ tag })
-      .then((r) => {
-        const promises = r.map(image => this.getPhoto(image.id));
-        return Promise.all(promises).then(values => values);
-      });
-  },
-  // Returns all of a photo's tags when given an id
-  getTags(id) {
-    let sql = `SELECT * FROM image_tags WHERE image_id=?`;
-    const inserts = [id];
-    sql = mysql.format(sql, inserts);
-
-    return new Promise((resolve, reject) => {
-      db.query(sql, (err, results) => {
-        if (err) reject(new ServerError('getTags() returned an error'));
-        if (!results || results.length === 0) {
-          resolve({ image_id: id, tags: [] });
-        } else {
-          const tags = results.map(row => row.tag);
-          resolve({
-            image_id: id,
-            tags,
-          });
-        }
-      });
-    });
-  },
   getPhoto(id) {
     let sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM images LEFT JOIN albums ON albums.image_id=images.image_id WHERE images.image_id=?`;
     const inserts = [id];
@@ -212,21 +181,97 @@ module.exports = {
       });
     });
   },
-  saveNewPhotoToDb(data) {
+  // Returns an array of photo objects when given a tag
+  getTag({
+    tag,
+  } = {}) {
+    return this.getImagesWithTag({ tag })
+      .then((r) => {
+        const promises = r.map(image => this.getPhoto(image.id));
+        return Promise.all(promises).then(values => values);
+      });
+  },
+  // Returns all of a photo's tags when given an id
+  getTags(id) {
+    let sql = `SELECT * FROM image_tags WHERE image_id=?`;
+    const inserts = [id];
+    sql = mysql.format(sql, inserts);
+
     return new Promise((resolve, reject) => {
-      let sql = 'INSERT INTO images (stream, date) VALUES (?, ?)';
-      const inserts = [data.stream, data.date];
+      db.query(sql, (err, results) => {
+        if (err) reject(new ServerError('getTags() returned an error'));
+        if (!results || results.length === 0) {
+          resolve({ image_id: id, tags: [] });
+        } else {
+          const tags = results.map(row => row.tag);
+          resolve({
+            image_id: id,
+            tags,
+          });
+        }
+      });
+    });
+  },
+  updateAlbumsTable(newData, recordExists = false) {
+    return new Promise((resolve, reject) => {
+      let sql;
+      let inserts;
+      if (!recordExists) {
+        sql = 'INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)';
+        inserts = [newData.album.name, 1, newData.album.cover, newData.id];
+      } else {
+        sql = 'UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?';
+        inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
+      }
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
-        if (err || !results.insertId) {
-          reject(new ServerError('saveNewPhotoToDb() failed'));
+        if (err || !results || results.affectedRows !== 1) {
+          reject(new ServerError('updateAlbumsTable() failed'));
           return;
         }
-        const photo = Object.assign({}, data, { id: results.insertId });
-        resolve(photo);
+        resolve(newData);
       });
-    })
-      .then(photoData => this.updateAlbumsTable(photoData));
+    });
+  },
+  updateImagesTable(newData) {
+    return new Promise((resolve, reject) => {
+      let sql = 'UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?';
+
+      const inserts = [
+        newData.image_url,
+        newData.width,
+        newData.height,
+        newData.mid_url,
+        newData.thumb_url,
+        newData.date,
+        newData.description,
+        newData.stream,
+        newData.hidden,
+        newData.processing,
+        newData.id,
+      ];
+      sql = db.format(sql, inserts);
+      db.query(sql, (err, results) => {
+        if (err || !results) reject(new ServerError('updatImagesTable() failed'));
+        resolve(newData);
+      });
+    });
+  },
+  updatePhoto(requestData) {
+    let newData = {};
+    let oldData = {};
+    let recordExists = false;
+    return this.getPhoto(requestData.id)
+      .then((data) => {
+        if (data.album.name) recordExists = true;
+        oldData = data;
+        newData = Object.assign(oldData, requestData);
+        return newData;
+      })
+      .then(this.updateImagesTable)
+      .then(() => this.updateAlbumsTable(newData, recordExists))
+      .then(() => this.reorderAlbum(newData.album.name))
+      .then(() => this.getPhoto(newData.id));
   },
   uploadPhotoToS3({
     path,
@@ -252,6 +297,17 @@ module.exports = {
       });
     });
   },
+  removeAlbumCover(albumName) {
+    return new Promise((resolve, reject) => {
+      let sql = 'UPDATE albums SET album_cover=0 WHERE album_cover=1 AND album=?';
+      const inserts = [albumName];
+      sql = db.format(sql, inserts);
+      db.query(sql, (err) => {
+        if (err) reject(new ServerError('removeAlbumCover() failed'));
+        resolve(albumName);
+      });
+    });
+  },
   reorderAlbum(name) {
     return new Promise((resolve, reject) => {
       let sql = 'SELECT * FROM albums WHERE album=? ORDER BY position ASC';
@@ -273,37 +329,21 @@ module.exports = {
       });
     });
   },
-  updateAlbumsTable(newData, recordExists = false) {
+  saveNewPhotoToDb(data) {
     return new Promise((resolve, reject) => {
-      let sql;
-      let inserts;
-      if (!recordExists) {
-        sql = 'INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)';
-        inserts = [newData.album.name, 1, newData.album.cover, newData.id];
-      } else {
-        sql = 'UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?';
-        inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
-      }
+      let sql = 'INSERT INTO images (stream, date) VALUES (?, ?)';
+      const inserts = [data.stream, data.date];
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
-        if (err || !results || results.affectedRows !== 1) {
-          reject(new ServerError('updateAlbumsTable() failed'));
+        if (err || !results.insertId) {
+          reject(new ServerError('saveNewPhotoToDb() failed'));
           return;
         }
-        resolve(newData);
+        const photo = Object.assign({}, data, { id: results.insertId });
+        resolve(photo);
       });
-    });
-  },
-  removeAlbumCover(albumName) {
-    return new Promise((resolve, reject) => {
-      let sql = 'UPDATE albums SET album_cover=0 WHERE album_cover=1 AND album=?';
-      const inserts = [albumName];
-      sql = db.format(sql, inserts);
-      db.query(sql, (err) => {
-        if (err) reject(new ServerError('removeAlbumCover() failed'));
-        resolve(albumName);
-      });
-    });
+    })
+      .then(photoData => this.updateAlbumsTable(photoData));
   },
   setAlbumCover(albumName, imageId = null) {
     return this.removeAlbumCover(albumName)
@@ -323,45 +363,5 @@ module.exports = {
           return results;
         });
       });
-  },
-  updatePhoto(requestData) {
-    let newData = {};
-    let oldData = {};
-    let recordExists = false;
-    return this.getPhoto(requestData.id)
-      .then((data) => {
-        if (data.album.name) recordExists = true;
-        oldData = data;
-        newData = Object.assign(oldData, requestData);
-        return newData;
-      })
-      .then(this.updateImagesTable)
-      .then(() => this.updateAlbumsTable(newData, recordExists))
-      .then(() => this.reorderAlbum(newData.album.name))
-      .then(() => this.getPhoto(newData.id));
-  },
-  updateImagesTable(newData) {
-    return new Promise((resolve, reject) => {
-      let sql = 'UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?';
-
-      const inserts = [
-        newData.image_url,
-        newData.width,
-        newData.height,
-        newData.mid_url,
-        newData.thumb_url,
-        newData.date,
-        newData.description,
-        newData.stream,
-        newData.hidden,
-        newData.processing,
-        newData.id,
-      ];
-      sql = db.format(sql, inserts);
-      db.query(sql, (err, results) => {
-        if (err || !results) reject(new ServerError('updatImagesTable() failed'));
-        resolve(newData);
-      });
-    });
   },
 };
