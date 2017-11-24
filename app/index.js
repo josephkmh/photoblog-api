@@ -27,7 +27,7 @@ class InputError extends Error {
 
 module.exports = {
   countImagesInAlbum(albumName) {
-    let sql = ("SELECT COUNT(*) AS 'count' FROM albums WHERE album=?");
+    let sql = ('SELECT COUNT(*) AS \'count\' FROM albums WHERE album=?');
     const inserts = [albumName];
     sql = db.format(sql, inserts);
 
@@ -44,8 +44,8 @@ module.exports = {
     return new Promise((resolve) => {
       jimp.read(`uploads/full/${filename}`)
         .then((fullImage) => {
-          const mediumPath = `uploads/medium/${filename}`;   
-          fullImage.scaleToFit(800, 800).quality(60).write(mediumPath);  
+          const mediumPath = `uploads/medium/${filename}`;
+          fullImage.scaleToFit(800, 800).quality(60).write(mediumPath);
           return {
             fullImage,
             mediumPath,
@@ -53,7 +53,7 @@ module.exports = {
         })
         .then(({ fullImage, mediumPath }) => {
           const thumbnailPath = `uploads/thumbnail/${filename}`;
-          fullImage.scaleToFit(400,400).quality(60).write(thumbnailPath);
+          fullImage.scaleToFit(400, 400).quality(60).write(thumbnailPath);
           resolve({
             fullImage,
             mediumPath,
@@ -68,38 +68,35 @@ module.exports = {
     const inserts = [name];
     sql = db.format(sql, inserts);
 
-    const albumPromise = new Promise((resolve, reject) => {
-      if (!name || name === '') reject(new InputError('No album name specified')); 
+    const albumProm = new Promise((resolve, reject) => {
+      if (!name || name === '') reject(new InputError('No album name specified'));
       db.query(sql, (err, results) => {
         if (err || !results || results.length === 0) reject(new ServerError('No album was found'));
-        const photos = results.map((photo) => {
-          console.log('image', photo.image_id, photo.album_cover);
-          return {
-            hidden: photo.hidden,
-            id: photo.image_id,
-            isAlbumCover: photo.album_cover,
-            isOnFrontPage: photo.stream,
-            position: photo.position,
-            sizes: {
-              small: {
-                url: photo.thumb_url,
-                width: null,
-                height: null,
-              },
-              medium: {
-                url: photo.mid_url,
-                width: null,
-                height: null,
-              },
-              full: {
-                url: photo.image_url,
-                width: photo.width,
-                height: photo.height,
-              },
+        const photos = results.map(photo => ({
+          hidden: photo.hidden,
+          id: photo.image_id,
+          isAlbumCover: photo.album_cover,
+          isOnFrontPage: photo.stream,
+          position: photo.position,
+          sizes: {
+            small: {
+              url: photo.thumb_url,
+              width: null,
+              height: null,
             },
-            tags: null,
-          };
-        });
+            medium: {
+              url: photo.mid_url,
+              width: null,
+              height: null,
+            },
+            full: {
+              url: photo.image_url,
+              width: photo.width,
+              height: photo.height,
+            },
+          },
+          tags: null,
+        }));
         resolve({
           album: results[0].album,
           size: photos.length,
@@ -107,10 +104,8 @@ module.exports = {
         });
       });
     });
-    const sizePromise = this.countImagesInAlbum(name);
-    return Promise.all([albumPromise, sizePromise]).then(([album, size]) => {
-      return Object.assign({}, album, { size });
-    });
+    const sizeProm = this.countImagesInAlbum(name);
+    return Promise.all([albumProm, sizeProm]).then(([a, s]) => Object.assign({}, a, { s }));
   },
   // Returns an array of images when given a tag, used in getTag
   getImagesWithTag({
@@ -165,7 +160,7 @@ module.exports = {
     const inserts = [id];
     sql = mysql.format(sql, inserts);
 
-    const photoPromise = new Promise((resolve, reject) => {
+    const photoProm = new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
         if (err || !results.length || results.length > 1) {
           reject(new ServerError('No photo found'));
@@ -192,8 +187,8 @@ module.exports = {
         });
       });
     });
-    const tagsPromise = this.getTags(id);
-    return Promise.all([photoPromise, tagsPromise]).then(([photo, tags]) => Object.assign({}, photo, { tags }));
+    const tagsProm = this.getTags(id);
+    return Promise.all([photoProm, tagsProm]).then(([p, t]) => Object.assign({}, p, { t }));
   },
   getStream() {
     const sql = `SELECT images.*, albums.album FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.stream=1`;
