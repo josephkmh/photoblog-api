@@ -271,27 +271,25 @@ module.exports = {
     });
   },
   updateAlbumsTable(newData, albumAssigned = false) {
-  return new Promise((resolve, reject) => {
-    let sql, inserts;
-    if (!albumAssigned) {
-    sql = "INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)";
-    inserts = [newData.album.name, 1, newData.album.cover, newData.id];
-    } else {
-    sql = "UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?";
-    inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
-    }
-    sql = db.format(sql, inserts);
-    db.query(sql, (err, results, fields) => {
-    if (err || !results || results.affectedRows !== 1) {
-      reject({
-      message: 'updating albums table failed.', 
-      error: err
+    return new Promise((resolve, reject) => {
+      let sql;
+      let inserts;
+      if (!albumAssigned) {
+        sql = 'INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)';
+        inserts = [newData.album.name, 1, newData.album.cover, newData.id];
+      } else {
+        sql = 'UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?';
+        inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
+      }
+      sql = db.format(sql, inserts);
+      db.query(sql, (err, results) => {
+        if (err || !results || results.affectedRows !== 1) {
+          reject(new ServerError('updateAlbumsTable() failed'));
+          return;
+        }
+        resolve(newData);
       });
-      return;
-    };
-    resolve(newData);
     });
-  });
   },
   removeAlbumCover(albumName) {
   return new Promise(function(resolve, reject){
