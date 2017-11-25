@@ -12,15 +12,21 @@ const bucket = process.env.NODE_ENV === 'development' ? 'ninaphotoblog.dev' : 'n
 const S3 = new AWS.S3();
 
 class ServerError extends Error {
-  constructor(...args) {
+  constructor(message, errMessage, ...args) {
     super(...args);
+    this.errMessage = errMessage;
+    this.message = message;
+    this.name = this.constructor.name;
     Error.captureStackTrace(this, ServerError);
   }
 }
 
 class InputError extends Error {
-  constructor(...args) {
+  constructor(message, errMessage, ...args) {
     super(...args);
+    this.name = this.constructor.name;
+    this.errMessage = errMessage;
+    this.message = message;
     Error.captureStackTrace(this, ServerError);
   }
 }
@@ -110,16 +116,15 @@ module.exports = {
   // Returns an array of images when given a tag, used in getTag
   getImagesWithTag({
     tag,
-    limit = appConfig.stdOffset,
+    limit = 100,
     offset = 0,
   } = {}) {
-    let sql = `SELECT images.* FROM image_tags INNER JOIN images ON image_tags.image_id=images.image_id WHERE image_tags.tag=? LIMIT ? OFFSET ?`;
+    let sql = `SELECT image_tags.tag, images.* FROM image_tags INNER JOIN images ON image_tags.image_id=images.image_id WHERE image_tags.tag=? LIMIT ? OFFSET ?`;
     const inserts = [tag, limit, offset];
     sql = db.format(sql, inserts);
-
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
-        if (err || results.length === 0) reject(new ServerError('No images found with that tag'));
+        if (err || !results) reject(new ServerError('getImagesWithTag() failed', err.message));
         resolve(results);
       });
     });
@@ -132,7 +137,7 @@ module.exports = {
     const photoProm = new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
         if (err || !results.length || results.length > 1) {
-          reject(new ServerError('No photo found'));
+          reject(new ServerError('getPhoto() failed'));
           return;
         }
         const data = results[0];
@@ -187,7 +192,7 @@ module.exports = {
   } = {}) {
     return this.getImagesWithTag({ tag })
       .then((r) => {
-        const promises = r.map(image => this.getPhoto(image.id));
+        const promises = r.map(image => this.getPhoto(image.image_id));
         return Promise.all(promises).then(values => values);
       });
   },
