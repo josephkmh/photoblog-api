@@ -84,6 +84,7 @@ module.exports = {
           isAlbumCover: photo.album_cover,
           isOnFrontPage: photo.stream,
           position: photo.position,
+          processing: photo.processing,
           sizes: {
             small: {
               url: photo.thumb_url,
@@ -122,6 +123,7 @@ module.exports = {
     let sql = `SELECT image_tags.tag, images.* FROM image_tags INNER JOIN images ON image_tags.image_id=images.image_id WHERE image_tags.tag=? LIMIT ? OFFSET ?`;
     const inserts = [tag, limit, offset];
     sql = db.format(sql, inserts);
+
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
         if (err || !results) reject(new ServerError('getImagesWithTag() failed', err.message));
@@ -145,24 +147,41 @@ module.exports = {
         resolve({
           hidden: data.hidden,
           id: data.image_id,
+          isAlbumCover: data.album_cover,
+          isOnFrontPage: data.stream,
           stream: data.stream,
           processing: data.processing,
           width: data.width,
           height: data.height,
-          image_url: data.image_url,
-          mid_url: data.mid_url,
-          thumb_url: data.thumb_url,
           tags: null,
+          date: data.date,
           album: {
             name: data.album,
             cover: data.album_cover,
             position: data.position,
           },
+          sizes: {
+            small: {
+              url: data.thumb_url,
+              width: null,
+              height: null,
+            },
+            medium: {
+              url: data.mid_url,
+              width: null,
+              height: null,
+            },
+            full: {
+              url: data.image_url,
+              width: data.width,
+              height: data.height,
+            },
+          },
         });
       });
     });
     const tagsProm = this.getTags(id);
-    return Promise.all([photoProm, tagsProm]).then(([p, t]) => Object.assign({}, p, { t }));
+    return Promise.all([photoProm, tagsProm]).then(([p, t]) => Object.assign({}, p, { tags: t.tags }));
   },
   getStream() {
     const sql = `SELECT images.*, albums.album FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.stream=1`;
@@ -174,11 +193,37 @@ module.exports = {
         }
         const photos = results.map((photo) => {
           const singlePhoto = {
-            album: photo.album,
+            hidden: photo.hidden,
             id: photo.image_id,
+            isAlbumCover: photo.album_cover,
             isOnFrontPage: photo.stream,
-            position: photo.position,
-            thumbnail: photo.thumb_url,
+            stream: photo.stream,
+            processing: photo.processing,
+            width: photo.width,
+            height: photo.height,
+            date: photo.date,
+            album: {
+              name: photo.album,
+              cover: photo.album_cover,
+              position: photo.position,
+            },
+            sizes: {
+              small: {
+                url: photo.thumb_url,
+                width: null,
+                height: null,
+              },
+              medium: {
+                url: photo.mid_url,
+                width: null,
+                height: null,
+              },
+              full: {
+                url: photo.image_url,
+                width: photo.width,
+                height: photo.height,
+              },
+            },
           };
           return singlePhoto;
         });
@@ -223,10 +268,20 @@ module.exports = {
       let inserts;
       if (!recordExists) {
         sql = 'INSERT INTO albums (album, position, album_cover, image_id) VALUES (?, ?, ?, ?)';
-        inserts = [newData.album.name, 1, newData.album.cover, newData.id];
+        inserts = [
+          newData.album.name,
+          1,
+          newData.isAlbumCover || newData.album.cover,
+          newData.id,
+        ];
       } else {
         sql = 'UPDATE albums SET album=?, position=?, album_cover=? WHERE image_id=?';
-        inserts = [newData.album.name, newData.album.position, newData.album.cover, newData.id];
+        inserts = [
+          newData.album.name,
+          newData.album.position,
+          newData.isAlbumCover || newData.album.cover,
+          newData.id,
+        ];
       }
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
@@ -243,14 +298,14 @@ module.exports = {
       let sql = 'UPDATE images SET image_url=?, width=?, height=?, mid_url=?, thumb_url=?, date=?, description=?, stream=?, hidden=?, processing=? WHERE image_id = ?';
 
       const inserts = [
-        newData.image_url,
-        newData.width,
-        newData.height,
-        newData.mid_url,
-        newData.thumb_url,
+        newData.sizes.full.url,
+        newData.sizes.full.width,
+        newData.sizes.full.height,
+        newData.sizes.medium.url,
+        newData.sizes.small.url,
         newData.date,
         newData.description,
-        newData.stream,
+        newData.isOnFrontPage || newData.stream,
         newData.hidden,
         newData.processing,
         newData.id,
@@ -270,7 +325,7 @@ module.exports = {
       .then((data) => {
         if (data.album.name) recordExists = true;
         oldData = data;
-        newData = Object.assign(oldData, requestData);
+        newData = this.filterNewPhotoData(oldData, requestData);
         return newData;
       })
       .then(this.updateImagesTable)
@@ -368,5 +423,29 @@ module.exports = {
           return results;
         });
       });
+  },
+  filterNewPhotoData(oldData, newData) {
+    function recursivelyCheck(o, n) {
+      const filtered = {};
+      const keys = Object.keys(o);
+      for (let i = 0; i < keys.length; i++) {
+        // if the value is an object, loop through it's properties and copy them
+        if (typeof o[keys[i]] === 'object' && o[keys[i]] !== null) {
+          if (!n || !n[keys[i]]) {
+            filtered[keys[i]] = recursivelyCheck(o[keys[i]]);
+          } else {
+            filtered[keys[i]] = recursivelyCheck(o[keys[i]], n[keys[i]]);
+          }
+        } else {
+          filtered[keys[i]] = o[keys[i]]; // copy the oldData value
+          if (n && n[keys[i]]) {
+            filtered[keys[i]] = n[keys[i]];
+          } // if it exists, overwrite with the newData value
+        }
+      }
+      return filtered;
+    }
+    const filteredData = recursivelyCheck(oldData, newData);
+    return filteredData;
   },
 };
