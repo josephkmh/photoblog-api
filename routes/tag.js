@@ -19,7 +19,6 @@ router.get('/:tag', (req, res) => {
     })
     .catch((e) => {
       // TODO log e somehow
-      console.log(e);
       res.json(e);
     });
 });

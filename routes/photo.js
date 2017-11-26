@@ -9,19 +9,19 @@ const express = require('express'),
 // initialize multer for handling multipart/form-data uploads
 const multer = require('multer');
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/full');
-    },
-    filename: (req, file, cb) => {
-        let dateObj  = new Date();
-        let uniqueId = uuid().substr(0,12);
-        let date     = dateObj.toISOString().substr(0, 10);
-        file.ext     = mime.extension(file.mimetype);
-        file.bareFilename = `${uniqueId}_${date}`;
-        cb(null, `${file.bareFilename}.${file.ext}`);
-    }
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/full');
+  },
+  filename: (req, file, cb) => {
+    const dateObj = new Date();
+    const uniqueId = uuid().substr(0,12);
+    let date = dateObj.toISOString().substr(0, 10);
+    file.ext = mime.extension(file.mimetype);
+    file.bareFilename = `${uniqueId}_${date}`;
+    cb(null, `${file.bareFilename}.${file.ext}`);
+  }
 });
-const upload = multer({storage})
+const upload = multer({ storage });
 
 router.get('/', function(req, res) {
     res.json({
@@ -121,25 +121,27 @@ router.post('/', upload.single('image'), function(req, res) {
     });
 });
 
-router.put('/:id', function(req, res) {
-    let newData = req.body;
-    newData.id = parseInt(req.params.id, 10);
-    app.updatePhoto(newData)
-    .then(data => {
-        res.json({
-            status: 200,
-            message: `Photo ${data.id} was updated.`,
-            photo: data
-        });
+router.put('/:id', (req, res) => {
+  const newData = req.body;
+  console.log('it didnt worked');
+  newData.id = parseInt(req.params.id, 10);
+  app.updatePhoto(newData)
+    .then((photo) => {
+      res.json({
+        status: 200,
+        message: `Photo ${photo.id} was updated.`,
+        photo,
+      });
+      return photo;
     })
-    .then(app.setAlbumCover(req.body.album.name, 2211))
-    .catch(e => {
-        console.error(e);
-        res.status(500).json({
-            status: 500,
-            message: `Something went wrong. Sorry about that!`,
-            error: e
-        });
+    .then(photo => app.setAlbumCover(photo.album.name, 2211))
+    .catch((e) => {
+      console.error(e);
+      res.status(500).json({
+        status: 500,
+        message: `Something went wrong. Sorry about that!`,
+        error: e,
+      });
     });
 });
 

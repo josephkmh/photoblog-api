@@ -19,17 +19,16 @@ app.use('/tag', routes.tag);
 app.use('/stream', routes.stream);
 
 if (process.env.NODE_ENV === 'development') {
-  app.use(function (err, req, res, next) {
+  app.use((err, req, res) => {
     console.log('=== ERROR ===');
     console.log(err.stack);
-    res.status(500).send('Express caught error...');
+    // res.status(500).send('Express caught error...');
   });
 } else {
-  app.use(function (err, req, res, next) {
-    res.status(500).send('Something broke! Sorry about that.');
+  app.use((err, req, res) => {
+    // res.status(500).send('Something broke! Sorry about that.');
   });
 }
-
 
 app.listen(port);
 console.log(`API server listening on ${port}`);
