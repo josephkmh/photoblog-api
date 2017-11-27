@@ -12,10 +12,11 @@ const bucket = process.env.NODE_ENV === 'development' ? 'ninaphotoblog.dev' : 'n
 const S3 = new AWS.S3();
 
 class ServerError extends Error {
-  constructor(message, errMessage, ...args) {
-    super(...args);
-    this.errMessage = errMessage;
-    this.message = message;
+  constructor(args) {
+    super(args);
+    const defaultMessage = 'There was an error. Sorry about that!';
+    this.status = args.status;
+    this.message = args.message || defaultMessage;
     this.name = this.constructor.name;
     Error.captureStackTrace(this, ServerError);
   }
@@ -40,7 +41,11 @@ module.exports = {
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
         if (err) {
-          reject(new ServerError('Error counting images in album'));
+          reject(new ServerError({
+            status: 500,
+            message: 'Error counting images in album',
+          }));
+          return;
         }
         resolve(results[0].count);
       });
@@ -77,7 +82,14 @@ module.exports = {
     const albumProm = new Promise((resolve, reject) => {
       if (!name || name === '') reject(new InputError('No album name specified'));
       db.query(sql, (err, results) => {
-        if (err || !results || results.length === 0) reject(new ServerError('No album was found'));
+        if (err) reject(new ServerError({ status: 500 }));
+        if (!results || results.length === 0) {
+          reject(new ServerError({
+            status: 404,
+            message: `No album found with the name: ${name}`,
+          }));
+          return;
+        }
         const photos = results.map(photo => ({
           hidden: photo.hidden,
           id: photo.image_id,
@@ -126,7 +138,12 @@ module.exports = {
 
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
-        if (err || !results) reject(new ServerError('getImagesWithTag() failed', err.message));
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+          }));
+          return;
+        }
         resolve(results);
       });
     });
@@ -138,8 +155,18 @@ module.exports = {
 
     const photoProm = new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
-        if (err || !results.length || results.length > 1) {
-          reject(new ServerError('getPhoto() failed'));
+        if (err) {
+          reject(new ServerError({
+            message: 'There was a server error. Sorry about that!',
+            status: 500,
+          }));
+          return;
+        }
+        if (!results.length || results.length > 1) {
+          reject(new ServerError({
+            message: `No image found with id: ${id}`,
+            status: 404,
+          }));
           return;
         }
         const data = results[0];
@@ -187,8 +214,15 @@ module.exports = {
     const sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.stream=1`;
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
-        if (err || !results.length) {
-          reject(new ServerError('Photo stream was not found'));
+        if (err) {
+          reject(new ServerError({ status: 500 }));
+          return;
+        }
+        if (!results.length) {
+          reject(new ServerError({
+            status: 500,
+            message: 'Photo stream was not found',
+          }));
           return;
         }
         const photos = results.map((photo) => {
@@ -249,8 +283,9 @@ module.exports = {
 
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
-        if (err) reject(new ServerError('getTags() returned an error'));
-        if (!results || results.length === 0) {
+        if (err) {
+          reject(new ServerError({ status: 500 }));
+        } else if (!results || results.length === 0) {
           resolve({ image_id: id, tags: [] });
         } else {
           const tags = results.map(row => row.tag);
@@ -286,7 +321,10 @@ module.exports = {
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
         if (err || !results || results.affectedRows !== 1) {
-          reject(new ServerError('updateAlbumsTable() failed'));
+          reject(new ServerError({
+            status: 500,
+            message: 'Error encountered when updating albums table.',
+          }));
           return;
         }
         resolve(newData);
@@ -312,7 +350,13 @@ module.exports = {
       ];
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
-        if (err || !results) reject(new ServerError('updatImagesTable() failed'));
+        if (err || !results) {
+          reject(new ServerError({
+            status: 500,
+            message: 'Error encountered when updating images table.',
+          }));
+          return;
+        }
         resolve(newData);
       });
     });
@@ -348,12 +392,21 @@ module.exports = {
         Bucket: bucket,
         ContentType: mimetype,
       }, (err, data) => {
-        if (err) reject(new ServerError('uploadPhotoToS3() failed: error from SDK'));
-        if (data) {
-          const uploadData = Object.assign({}, data, { filename });
-          resolve(uploadData);
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+            message: 'Unexpected error encountered when uploading to S3 via the SDK',
+          }));
+          return;
         }
-        reject(new ServerError('uploadPhotoToS3() failed: no error or data received.'));
+        if (!data) {
+          reject(new ServerError({
+            status: 500,
+            message: 'uploadPhotoToS3() failed: no error or data received.',
+          }));
+        }
+        const uploadData = Object.assign({}, data, { filename });
+        resolve(uploadData);
       });
     });
   },
@@ -363,7 +416,13 @@ module.exports = {
       const inserts = [albumName];
       sql = db.format(sql, inserts);
       db.query(sql, (err) => {
-        if (err) reject(new ServerError('removeAlbumCover() failed'));
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+            message: 'Error encountered when removing existing album cover.',
+          }));
+          return;
+        }
         resolve(albumName);
       });
     });
@@ -374,14 +433,25 @@ module.exports = {
       const inserts = [name];
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
-        if (err) reject(new ServerError('reorderAlbum() failed on first query'));
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+            message: 'Error encountered when reordering album (first query).',
+          }));
+          return;
+        }
         let count = 1;
         results.forEach((image) => {
           let sql2 = 'UPDATE albums SET position=? WHERE image_id=?';
           const inserts2 = [count, image.image_id];
           sql2 = db.format(sql2, inserts2);
           db.query(sql2, (err2) => {
-            if (err2) reject(new ServerError('reorderAlbum() failed on second query'));
+            if (err) {
+              reject(new ServerError({
+                status: 500,
+                message: 'Error encountered when reordering album (second query).',
+              }));
+            }
           });
           count++;
         });
@@ -396,7 +466,10 @@ module.exports = {
       sql = db.format(sql, inserts);
       db.query(sql, (err, results) => {
         if (err || !results.insertId) {
-          reject(new ServerError('saveNewPhotoToDb() failed'));
+          reject(new ServerError({
+            status: 500,
+            message: 'Error encountered when inserting new image in database.',
+          }));
           return;
         }
         const photo = Object.assign({}, data, { id: results.insertId });
@@ -418,9 +491,17 @@ module.exports = {
           inserts = [imageId, albumName];
         }
         sql = db.format(sql, inserts);
-        db.query(sql, (err, results) => {
-          if (err) throw new ServerError('setAlbumCover() failed');
-          return results;
+        return new Promise((resolve, reject) => {
+          db.query(sql, (err, results) => {
+            if (err) {
+              reject(new ServerError({
+                status: 500,
+                message: 'Error encountered when setting new album cover.',
+              }));
+              return;
+            }
+            resolve(results);
+          });
         });
       });
   },

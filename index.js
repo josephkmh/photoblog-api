@@ -10,6 +10,16 @@ app.use(cors());
 
 // initialize body parser for simple json payloads
 app.use(bodyParser.json());
+app.use((error, req, res, next) => {
+  if (error instanceof SyntaxError) {
+    res.json({
+      status: 400,
+      message: 'Error in request syntax. Make sure there your JSON is valid.',
+    });
+  } else {
+    next();
+  }
+});
 
 const routes = require('./routes');
 
