@@ -1,54 +1,56 @@
-const express = require('express'),
-    router = express.Router(),
-    app = require('../app'),
-    db = require('../config/db-connection')
-    uuid = require('uuid/v4')
-    mime = require('mime')
-    fs = require('fs');
+const express = require('express');
+const app = require('../app');
+const uuid = require('uuid/v4');
+const mime = require('mime');
+
+const router = express.Router();
 
 // initialize multer for handling multipart/form-data uploads
 const multer = require('multer');
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/full');
   },
   filename: (req, file, cb) => {
+    const theFile = file;
     const dateObj = new Date();
-    const uniqueId = uuid().substr(0,12);
-    let date = dateObj.toISOString().substr(0, 10);
-    file.ext = mime.extension(file.mimetype);
-    file.bareFilename = `${uniqueId}_${date}`;
-    cb(null, `${file.bareFilename}.${file.ext}`);
-  }
+    const uniqueId = uuid().substr(0, 12);
+    const date = dateObj.toISOString().substr(0, 10);
+    theFile.ext = mime.extension(file.mimetype);
+    theFile.bareFilename = `${uniqueId}_${date}`;
+    cb(null, `${theFile.bareFilename}.${theFile.ext}`);
+  },
 });
 const upload = multer({ storage });
 
-router.get('/', function(req, res) {
-    res.json({
-        status: 401,
-        message: "No photo id was specified"
-    });
+router.get('/', (req, res) => {
+  res.json({
+    status: 401,
+    message: 'No photo id was specified',
+  });
 });
 
-router.get('/:id', function(req, res) {
-    app.getPhoto(req.params.id)
-    .then(r => {
-        res.json(r);
+router.get('/:id', (req, res) => {
+  app.getPhoto(req.params.id)
+    .then((r) => {
+      res.json(r);
     })
-    .catch(e => {
-        switch (e) {
-            case "NO_PHOTO_FOUND":
-                res.json({
-                    status: 404,
-                    message: "No photo found."
-                });
-                break;
-            default:
-                res.json({
-                    status: 500,
-                    message: "Something went wrong, sorry about that!"
-                });
-        }
+    .catch((e) => {
+      console.log('e: ', e.status);
+      switch (e.name) {
+        case 'ServerError':
+          res.json({
+            status: e.status,
+            message: e.message,
+          });
+          break;
+        default:
+          res.json({
+            status: 500,
+            message: "Something went wrong, sorry about that!"
+          });
+      }
     });
 });
 
@@ -123,7 +125,6 @@ router.post('/', upload.single('image'), function(req, res) {
 
 router.put('/:id', (req, res) => {
   const newData = req.body;
-  console.log('it didnt worked');
   newData.id = parseInt(req.params.id, 10);
   app.updatePhoto(newData)
     .then((photo) => {
