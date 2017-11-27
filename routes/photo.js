@@ -34,10 +34,12 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   app.getPhoto(req.params.id)
     .then((r) => {
-      res.json(r);
+      res.json({
+        status: 200,
+        data: r,
+      });
     })
     .catch((e) => {
-      console.log('e: ', e.status);
       switch (e.name) {
         case 'ServerError':
           res.json({
@@ -48,7 +50,7 @@ router.get('/:id', (req, res) => {
         default:
           res.json({
             status: 500,
-            message: "Something went wrong, sorry about that!"
+            message: 'Something went wrong, sorry about that!',
           });
       }
     });
@@ -131,33 +133,40 @@ router.put('/:id', (req, res) => {
       res.json({
         status: 200,
         message: `Photo ${photo.id} was updated.`,
-        photo,
+        data: photo,
       });
       return photo;
     })
     .then(photo => app.setAlbumCover(photo.album.name, 2211))
     .catch((e) => {
-      console.error(e);
-      res.status(500).json({
-        status: 500,
-        message: `Something went wrong. Sorry about that!`,
-        error: e,
-      });
+      switch (e.name) {
+        case 'ServerError':
+          res.json({
+            status: e.status,
+            message: e.message,
+          });
+          break;
+        default:
+          res.json({
+            status: 500,
+            message: 'Something went wrong, sorry about that!',
+          });
+      }
     });
 });
 
-router.delete('/', function(req, res) {
-    res.status(405).json({
-        status: 405,
-        message: `Operation not permitted.`
-    });
+router.delete('/', (req, res) => {
+  res.status(405).json({
+    status: 405,
+    message: `Operation not permitted.`,
+  });
 });
 
-router.delete('/', function(req, res) {
-    res.status(405).json({
-        status: 405,
-        message: `Operation not permitted.`
-    });
+router.delete('/', (req, res) => {
+  res.status(405).json({
+    status: 405,
+    message: `Operation not permitted.`,
+  });
 });
 
 module.exports = router;

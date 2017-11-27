@@ -15,11 +15,25 @@ router.get('/:tag', (req, res) => {
     tag: req.params.tag,
   })
     .then((r) => {
-      res.json(r);
+      res.json({
+        status: 200,
+        data: r,
+      });
     })
     .catch((e) => {
-      // TODO log e somehow
-      res.json(e);
+      switch (e.name) {
+        case 'ServerError':
+          res.json({
+            status: e.status,
+            message: e.message,
+          });
+          break;
+        default:
+          res.json({
+            status: 500,
+            message: 'Something went wrong, sorry about that!',
+          });
+      }
     });
 });
 

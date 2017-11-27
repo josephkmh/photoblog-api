@@ -1,6 +1,11 @@
+const album = require('./album');
+const photo = require('./photo');
+const stream = require('./stream');
+const tag = require('./tag');
+
 module.exports = {
-    album: require('./album'),
-    photo: require('./photo'),
-    stream: require('./stream'),
-    tag: require('./tag')
-}
+  album,
+  photo,
+  stream,
+  tag,
+};

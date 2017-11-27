@@ -13,7 +13,10 @@ router.get('/', (req, res) => {
 router.get('/:name', (req, res) => {
   app.getAlbum(req.params.name)
     .then((r) => {
-      res.json(r);
+      res.json({
+        status: 200,
+        data: r,
+      });
     })
     .catch((e) => {
       switch (e.name) {
