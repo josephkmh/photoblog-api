@@ -70,7 +70,7 @@ module.exports = {
   },
   // Returns an array of photos when given an album name, used in getAlbum
   getAlbum(name) {
-    let sql = `SELECT albums.album, albums.position, albums.album_cover, images.* FROM albums INNER JOIN images ON albums.image_id=images.image_id WHERE albums.album=? ORDER BY albums.position`;
+    let sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM albums INNER JOIN images ON albums.image_id=images.image_id WHERE albums.album=? ORDER BY albums.position`;
     const inserts = [name];
     sql = db.format(sql, inserts);
 
@@ -184,7 +184,7 @@ module.exports = {
     return Promise.all([photoProm, tagsProm]).then(([p, t]) => Object.assign({}, p, { tags: t.tags }));
   },
   getStream() {
-    const sql = `SELECT images.*, albums.album FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.stream=1`;
+    const sql = `SELECT images.*, albums.position, albums.album, albums.album_cover FROM images INNER JOIN albums ON albums.image_id=images.image_id WHERE images.stream=1`;
     return new Promise((resolve, reject) => {
       db.query(sql, (err, results) => {
         if (err || !results.length) {
