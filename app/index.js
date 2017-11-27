@@ -1,5 +1,4 @@
 const db = require('../config/db-connection');
-const appConfig = require('../config/app-config');
 const mysql = require('mysql');
 const fs = require('fs');
 const jimp = require('jimp');
@@ -446,7 +445,7 @@ module.exports = {
           const inserts2 = [count, image.image_id];
           sql2 = db.format(sql2, inserts2);
           db.query(sql2, (err2) => {
-            if (err) {
+            if (err2) {
               reject(new ServerError({
                 status: 500,
                 message: 'Error encountered when reordering album (second query).',
