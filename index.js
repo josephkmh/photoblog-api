@@ -31,7 +31,7 @@ app.use('/stream', routes.stream);
 if (process.env.NODE_ENV === 'development') {
   app.use((err, req, res) => {
     console.log('=== ERROR ===');
-    console.log(err.stack);
+    console.log(err.message);
     // res.status(500).send('Express caught error...');
   });
 } else {

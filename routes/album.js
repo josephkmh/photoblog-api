@@ -15,7 +15,7 @@ router.get('/:name', (req, res) => {
     .then((r) => {
       res.json({
         status: 200,
-        data: r,
+        album: r,
       });
     })
     .catch((e) => {
@@ -24,12 +24,14 @@ router.get('/:name', (req, res) => {
           res.json({
             status: e.status,
             message: e.message,
+            data: null
           });
           break;
         default:
           res.json({
             status: 500,
             message: 'An unknown error occurred.',
+            data: null
           });
       }
     });

@@ -116,7 +116,7 @@ module.exports = {
           tags: null,
         }));
         resolve({
-          album: results[0].album,
+          name: results[0].album,
           size: photos.length,
           photos,
         });
