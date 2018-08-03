@@ -14,7 +14,7 @@ app.use((error, req, res, next) => {
   if (error instanceof SyntaxError) {
     res.json({
       status: 400,
-      message: 'Error in request syntax. Make sure there your JSON is valid.',
+      message: 'Error in request syntax. Make sure that your JSON is valid.',
     });
   } else {
     next();
@@ -24,18 +24,18 @@ app.use((error, req, res, next) => {
 const routes = require('./routes');
 
 app.use('/photo', routes.photo);
-app.use('/album', routes.album);
+app.use('/albums', routes.albums);
 app.use('/tag', routes.tag);
 app.use('/stream', routes.stream);
 
 if (process.env.NODE_ENV === 'development') {
-  app.use((err, req, res) => {
-    console.log('=== ERROR ===');
-    console.log(err.message);
-    // res.status(500).send('Express caught error...');
+  app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
   });
 } else {
   app.use((err, req, res) => {
+    console.log('not using development environment variable, error not caught');
     // res.status(500).send('Something broke! Sorry about that.');
   });
 }

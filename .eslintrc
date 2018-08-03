@@ -6,7 +6,7 @@
     "rules": {
       "quotes": ["error", "single", {"allowTemplateLiterals": true}],
       "no-plusplus": 0,
-      "class-methods-use-this": false
+      "class-methods-use-this": 0
     },
     "parserOptions": {
       "ecmaFeatures": {

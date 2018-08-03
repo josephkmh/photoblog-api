@@ -27,7 +27,7 @@ class InputError extends Error {
     this.name = this.constructor.name;
     this.errMessage = errMessage;
     this.message = message;
-    Error.captureStackTrace(this, ServerError);
+    Error.captureStackTrace(this, InputError);
   }
 }
 
@@ -81,7 +81,12 @@ module.exports = {
     const albumProm = new Promise((resolve, reject) => {
       if (!name || name === '') reject(new InputError('No album name specified'));
       db.query(sql, (err, results) => {
-        if (err) reject(new ServerError({ status: 500 }));
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+            message: 'There was a server error.',
+          }));
+        }
         if (!results || results.length === 0) {
           reject(new ServerError({
             status: 404,
@@ -124,6 +129,21 @@ module.exports = {
     });
     const sizeProm = this.countImagesInAlbum(name);
     return Promise.all([albumProm, sizeProm]).then(([a, s]) => Object.assign({}, a, { s }));
+  },
+  // Returns an array of all albums
+  getAlbums() {
+    const sql = `SELECT albums.album_cover, albums.album, images.* FROM albums INNER JOIN images ON albums.image_id=images.image_id WHERE albums.album_cover=1 ORDER BY albums.album`;
+    return new Promise((resolve, reject) => {
+      db.query(sql, (err, results) => {
+        if (err) {
+          reject(new ServerError({
+            status: 500,
+          }));
+          return;
+        }
+        resolve(results);
+      });
+    });
   },
   // Returns an array of images when given a tag, used in getTag
   getImagesWithTag({
